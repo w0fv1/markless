@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <title>Markdown 转纯文本</title>
-  
+
   <!-- 引入 Water.css 以获得简洁美观的默认样式 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
-  
+
   <!-- 引入 Markdown-it 库 -->
   <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
 </head>
 <body>
   <h1>Markdown 转纯文本</h1>
-  <p>在下面的文本框中输入你的 Markdown 内容，然后点击“转为纯文本”按钮。</p>
+  <p>在下面的文本框中输入你的 Markdown 内容，然后点击「转为纯文本」。</p>
   
   <form id="markdownForm">
     <label for="markdownInput">Markdown 内容：</label>
@@ -25,78 +25,161 @@
   
   <h2>转换结果：</h2>
   <pre id="plainOutput" style="min-height: 3em;"></pre>
+  <button type="button" id="copyBtn" style="margin-top: 0.5em;">复制</button>
   
   <script>
     const convertBtn = document.getElementById('convertBtn');
     const markdownInput = document.getElementById('markdownInput');
     const plainOutput = document.getElementById('plainOutput');
+    const copyBtn = document.getElementById('copyBtn');
     
     // 初始化 markdown-it
     const md = window.markdownit();
 
-    /**
-     * 递归遍历 DOM，保留列表序号或项目符号
-     * @param {Node} node - 当前 DOM 节点
-     * @returns {string} - 拼接后的纯文本
-     */
-    function getCustomPlainText(node) {
-      let result = '';
-      // 遍历子节点
-      node.childNodes.forEach(child => {
-        // 如果是文本节点，直接拼接文本
-        if (child.nodeType === Node.TEXT_NODE) {
-          result += child.nodeValue;
-        }
-        // 如果是元素节点，需要根据标签类型做区分
-        else if (child.nodeType === Node.ELEMENT_NODE) {
-          const tagName = child.tagName.toLowerCase();
-
-          if (tagName === 'ol') {
-            // 有序列表
-            let index = 1;
-            // 遍历所有子 <li>
-            child.childNodes.forEach(li => {
-              if (li.tagName && li.tagName.toLowerCase() === 'li') {
-                // 前面加 "1. "、"2. "...
-                result += index + '. ' + getCustomPlainText(li) + '\n';
-                index++;
-              }
-            });
-          } 
-          else if (tagName === 'ul') {
-            // 无序列表
-            child.childNodes.forEach(li => {
-              if (li.tagName && li.tagName.toLowerCase() === 'li') {
-                // 前面加 "- "
-                result += '• ' + getCustomPlainText(li) + '\n';
-              }
-            });
-          } 
-          else {
-            // 其他标签(如 p, div, span 等)，递归获取文本
-            result += getCustomPlainText(child);
-          }
-        }
-      });
-      return result;
+    // 辅助函数：是否是纯空白（包括空格/换行等）
+    function isPureWhitespace(str) {
+      return /^[\s\uFEFF\xA0]*$/.test(str);
     }
 
+    /**
+     * 将一个 DOM 节点（已是渲染后的 HTML）转换为“带合理换行”的纯文本
+     * 原理：按块级元素和行级元素做区别处理，手动插入换行或空行
+     */
+    function domToText(node, options = {}) {
+      // 默认选项（可根据需要微调）
+      const {
+        inList = false,      // 当前是否在 <ol> 或 <ul> 内部
+        listIndex = 0,       // 有序列表计数器
+      } = options;
+
+      let result = '';
+
+      // 若是文本节点，处理掉首尾空白后直接返回
+      if (node.nodeType === Node.TEXT_NODE) {
+        // 如果全部是空白，就直接返回空字符串（不额外插入换行）
+        if (isPureWhitespace(node.nodeValue)) {
+          return '';
+        }
+        // 若有实际字符，则可以把连续空白折叠成一个空格，以免出现奇怪的缩进或换行
+        return node.nodeValue.replace(/\s+/g, ' ');
+      }
+
+      // 若是元素节点，则分情况处理
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const tagName = node.tagName.toLowerCase();
+
+        // 1) 换行标签 <br />
+        if (tagName === 'br') {
+          return '\n';
+        }
+
+        // 2) 段落 <p>、标题 <h1>~<h6>，一般在文本结束后加一个换行或空行
+        if (['p','h1','h2','h3','h4','h5','h6'].includes(tagName)) {
+          let textContent = '';
+          node.childNodes.forEach(child => {
+            textContent += domToText(child, { inList });
+          });
+          // 给段落或标题后面加一个空行
+          return textContent.trim() + '\n\n';
+        }
+
+        // 3) 有序列表 <ol>
+        if (tagName === 'ol') {
+          let localIndex = 1;
+          node.childNodes.forEach(child => {
+            // 只对 <li> 生效
+            if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
+              result += domToText(child, { inList: true, listIndex: localIndex }) + '\n';
+              localIndex++;
+            } else {
+              // 如果 <li> 之间还有别的节点(空白等)，也做递归处理
+              result += domToText(child, { inList: false });
+            }
+          });
+          return result + '\n';  // 列表结束后额外加一空行
+        }
+
+        // 4) 无序列表 <ul>
+        if (tagName === 'ul') {
+          node.childNodes.forEach(child => {
+            if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
+              result += domToText(child, { inList: true, listIndex: 0 }) + '\n';
+            } else {
+              result += domToText(child, { inList: false });
+            }
+          });
+          return result + '\n';
+        }
+
+        // 5) 列表项 <li>
+        if (tagName === 'li') {
+          // 在有序列表中，用 “数字. ”，在无序列表中用 “• ”
+          const prefix = (listIndex > 0) ? `${listIndex}. ` : '• ';
+          let liText = '';
+          node.childNodes.forEach(child => {
+            liText += domToText(child, { inList: true });
+          });
+          return prefix + liText.trim();
+        }
+
+        // 6) 其他块级元素（如 <div>、<section> 等）
+        //    如果需要，可以在结束后加一个换行
+        if (['div','section','article','blockquote'].includes(tagName)) {
+          let blockText = '';
+          node.childNodes.forEach(child => {
+            blockText += domToText(child, { inList });
+          });
+          // 块级元素后加一个换行
+          return blockText + '\n';
+        }
+
+        // 7) 其他行级元素（span、strong、em、b、i 等），不主动加换行
+        let inlineText = '';
+        node.childNodes.forEach(child => {
+          inlineText += domToText(child, { inList });
+        });
+        return inlineText;
+      }
+
+      // 如果不是文本节点，也不是元素节点（如注释），可忽略
+      return '';
+    }
+
+    // 点击 "转为纯文本" 按钮
     convertBtn.addEventListener('click', function() {
-      // 获取输入区域的 Markdown 文本
+      // 1. 获取输入区域的 Markdown 文本
       const markdownText = markdownInput.value;
-      
-      // 将 Markdown 转为 HTML
+
+      // 2. 利用 markdown-it 渲染成 HTML
       const renderedHtml = md.render(markdownText);
-      
-      // 创建一个临时标签存放渲染后的 HTML
+
+      // 3. 创建一个临时 <div> 存放渲染后的 HTML
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = renderedHtml;
-      
-      // 自定义函数：遍历 tempDiv，并且保留列表序号与项目前缀
-      const plainText = getCustomPlainText(tempDiv);
-      
-      // 显示在页面上
-      plainOutput.textContent = plainText.trim();
+
+      // 4. 递归解析 DOM，得到纯文本（带合理换行）
+      let finalText = '';
+      tempDiv.childNodes.forEach(child => {
+        finalText += domToText(child, { inList: false });
+      });
+
+      // 5. 去除多余首尾空白，并显示到页面
+      plainOutput.textContent = finalText.trim() + '\n';
+    });
+
+    // 点击 "复制" 按钮，将结果复制到剪贴板
+    copyBtn.addEventListener('click', async () => {
+      const text = plainOutput.textContent;
+      if (!text) {
+        alert("没有可复制的文本！");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        alert("复制成功！");
+      } catch (err) {
+        alert("复制失败，请手动复制。");
+      }
     });
   </script>
 </body>
