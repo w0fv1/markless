@@ -33,7 +33,54 @@
     
     // 初始化 markdown-it
     const md = window.markdownit();
-    
+
+    /**
+     * 递归遍历 DOM，保留列表序号或项目符号
+     * @param {Node} node - 当前 DOM 节点
+     * @returns {string} - 拼接后的纯文本
+     */
+    function getCustomPlainText(node) {
+      let result = '';
+      // 遍历子节点
+      node.childNodes.forEach(child => {
+        // 如果是文本节点，直接拼接文本
+        if (child.nodeType === Node.TEXT_NODE) {
+          result += child.nodeValue;
+        }
+        // 如果是元素节点，需要根据标签类型做区分
+        else if (child.nodeType === Node.ELEMENT_NODE) {
+          const tagName = child.tagName.toLowerCase();
+
+          if (tagName === 'ol') {
+            // 有序列表
+            let index = 1;
+            // 遍历所有子 <li>
+            child.childNodes.forEach(li => {
+              if (li.tagName && li.tagName.toLowerCase() === 'li') {
+                // 前面加 "1. "、"2. "...
+                result += index + '. ' + getCustomPlainText(li) + '\n';
+                index++;
+              }
+            });
+          } 
+          else if (tagName === 'ul') {
+            // 无序列表
+            child.childNodes.forEach(li => {
+              if (li.tagName && li.tagName.toLowerCase() === 'li') {
+                // 前面加 "- "
+                result += '• ' + getCustomPlainText(li) + '\n';
+              }
+            });
+          } 
+          else {
+            // 其他标签(如 p, div, span 等)，递归获取文本
+            result += getCustomPlainText(child);
+          }
+        }
+      });
+      return result;
+    }
+
     convertBtn.addEventListener('click', function() {
       // 获取输入区域的 Markdown 文本
       const markdownText = markdownInput.value;
@@ -45,11 +92,11 @@
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = renderedHtml;
       
-      // 提取文本内容
-      const plainText = tempDiv.textContent || tempDiv.innerText || '';
+      // 自定义函数：遍历 tempDiv，并且保留列表序号与项目前缀
+      const plainText = getCustomPlainText(tempDiv);
       
       // 显示在页面上
-      plainOutput.textContent = plainText;
+      plainOutput.textContent = plainText.trim();
     });
   </script>
 </body>
