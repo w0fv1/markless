@@ -1,8 +1,4 @@
-以下是一份示例的 README 文档，介绍了如何部署这个小项目到 GitHub Pages。请根据项目实际情况自行增补或修改。
-
----
-
-# Markdown 转纯文本
+# Markless Markdown 转纯文本
 
 本项目通过 [Markdown-it](https://github.com/markdown-it/markdown-it) 库，将输入的 Markdown 文本转换成 HTML 后，再提取为纯文本进行展示。页面样式使用了 [Water.css](https://github.com/kognise/water.css)，无需编写过多的 CSS，即可获得美观的界面。
 
