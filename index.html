@@ -2,185 +2,68 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Markdown 转纯文本</title>
-
-  <!-- 引入 Water.css 以获得简洁美观的默认样式 -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+  <meta name="description" id="metaDescription" content="将 Markdown 转为可读纯文本的静态网页工具，保留列表、换行、代码块与链接等关键信息。">
+  <meta name="keywords" content="Markdown,纯文本,Markdown 转换,文本提取,在线工具">
+  <link rel="canonical" href="./index.html">
+  <meta property="og:title" content="Markdown 转纯文本">
+  <meta property="og:description" id="metaOgDescription" content="将 Markdown 转为可读纯文本的静态网页工具，保留列表、换行、代码块与链接等关键信息。">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="./index.html">
+  <meta name="twitter:card" content="summary">
 
   <!-- 引入 Markdown-it 库 -->
   <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <h1>Markdown 转纯文本</h1>
-  <p>在下面的文本框中输入你的 Markdown 内容，然后点击「转为纯文本」。</p>
+  <header>
+    <div class="header-row">
+      <div>
+        <h1 data-i18n="title">Markdown 转纯文本</h1>
+        <p data-i18n="subtitle">在下面的文本框中输入你的 Markdown 内容，然后点击「转为纯文本」。</p>
+      </div>
+      <div class="header-controls">
+        <div class="select" id="langSelect">
+          <button type="button" class="select-trigger" id="langSelectTrigger" aria-haspopup="listbox" aria-expanded="false">
+            <span class="select-label" data-i18n="languageLabel">语言：</span>
+            <span class="select-value" id="langSelectValue"></span>
+          </button>
+          <ul class="select-menu" role="listbox" id="langSelectMenu"></ul>
+        </div>
+        <div class="select" id="themeSelect">
+          <button type="button" class="select-trigger" id="themeSelectTrigger" aria-haspopup="listbox" aria-expanded="false">
+            <span class="select-label" data-i18n="themeLabel">主题：</span>
+            <span class="select-value" id="themeSelectValue"></span>
+          </button>
+          <ul class="select-menu" role="listbox" id="themeSelectMenu"></ul>
+        </div>
+      </div>
+    </div>
+  </header>
   
-  <form id="markdownForm">
-    <label for="markdownInput">Markdown 内容：</label>
-    <textarea id="markdownInput" rows="6" placeholder="在这里输入 Markdown 格式文本"></textarea>
-    
-    <button type="button" id="convertBtn">转为纯文本</button>
-  </form>
+  <section class="panel">
+    <form id="markdownForm">
+      <label for="markdownInput" data-i18n="inputLabel">Markdown 内容：</label>
+      <textarea id="markdownInput" rows="8" placeholder="在这里输入 Markdown 格式文本" data-i18n-placeholder="placeholder"></textarea>
+      <div class="toolbar">
+        <button type="button" id="convertBtn" data-i18n="convertBtn">转为纯文本</button>
+        <button type="button" id="loadSampleBtn" class="secondary" data-i18n="loadSampleBtn">加载完整样例</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2 data-i18n="resultTitle">转换结果：</h2>
+    <pre id="plainOutput"></pre>
+    <div class="toolbar">
+      <button type="button" id="copyBtn" class="secondary" data-i18n="copyBtn">复制</button>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   
-  <hr/>
-  
-  <h2>转换结果：</h2>
-  <pre id="plainOutput" style="min-height: 3em;"></pre>
-  <button type="button" id="copyBtn" style="margin-top: 0.5em;">复制</button>
-  
-  <script>
-    const convertBtn = document.getElementById('convertBtn');
-    const markdownInput = document.getElementById('markdownInput');
-    const plainOutput = document.getElementById('plainOutput');
-    const copyBtn = document.getElementById('copyBtn');
-    
-    // 初始化 markdown-it
-    const md = window.markdownit();
-
-    // 辅助函数：是否是纯空白（包括空格/换行等）
-    function isPureWhitespace(str) {
-      return /^[\s\uFEFF\xA0]*$/.test(str);
-    }
-
-    /**
-     * 将一个 DOM 节点（已是渲染后的 HTML）转换为“带合理换行”的纯文本
-     * 原理：按块级元素和行级元素做区别处理，手动插入换行或空行
-     */
-    function domToText(node, options = {}) {
-      // 默认选项（可根据需要微调）
-      const {
-        inList = false,      // 当前是否在 <ol> 或 <ul> 内部
-        listIndex = 0,       // 有序列表计数器
-      } = options;
-
-      let result = '';
-
-      // 若是文本节点，处理掉首尾空白后直接返回
-      if (node.nodeType === Node.TEXT_NODE) {
-        // 如果全部是空白，就直接返回空字符串（不额外插入换行）
-        if (isPureWhitespace(node.nodeValue)) {
-          return '';
-        }
-        // 若有实际字符，则可以把连续空白折叠成一个空格，以免出现奇怪的缩进或换行
-        return node.nodeValue.replace(/\s+/g, ' ');
-      }
-
-      // 若是元素节点，则分情况处理
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const tagName = node.tagName.toLowerCase();
-
-        // 1) 换行标签 <br />
-        if (tagName === 'br') {
-          return '\n';
-        }
-
-        // 2) 段落 <p>、标题 <h1>~<h6>，一般在文本结束后加一个换行或空行
-        if (['p','h1','h2','h3','h4','h5','h6'].includes(tagName)) {
-          let textContent = '';
-          node.childNodes.forEach(child => {
-            textContent += domToText(child, { inList });
-          });
-          // 给段落或标题后面加一个空行
-          return textContent.trim() + '\n\n';
-        }
-
-        // 3) 有序列表 <ol>
-        if (tagName === 'ol') {
-          let localIndex = 1;
-          node.childNodes.forEach(child => {
-            // 只对 <li> 生效
-            if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
-              result += domToText(child, { inList: true, listIndex: localIndex }) + '\n';
-              localIndex++;
-            } else {
-              // 如果 <li> 之间还有别的节点(空白等)，也做递归处理
-              result += domToText(child, { inList: false });
-            }
-          });
-          return result + '\n';  // 列表结束后额外加一空行
-        }
-
-        // 4) 无序列表 <ul>
-        if (tagName === 'ul') {
-          node.childNodes.forEach(child => {
-            if (child.nodeType === Node.ELEMENT_NODE && child.tagName.toLowerCase() === 'li') {
-              result += domToText(child, { inList: true, listIndex: 0 }) + '\n';
-            } else {
-              result += domToText(child, { inList: false });
-            }
-          });
-          return result + '\n';
-        }
-
-        // 5) 列表项 <li>
-        if (tagName === 'li') {
-          // 在有序列表中，用 “数字. ”，在无序列表中用 “• ”
-          const prefix = (listIndex > 0) ? `${listIndex}. ` : '• ';
-          let liText = '';
-          node.childNodes.forEach(child => {
-            liText += domToText(child, { inList: true });
-          });
-          return prefix + liText.trim();
-        }
-
-        // 6) 其他块级元素（如 <div>、<section> 等）
-        //    如果需要，可以在结束后加一个换行
-        if (['div','section','article','blockquote'].includes(tagName)) {
-          let blockText = '';
-          node.childNodes.forEach(child => {
-            blockText += domToText(child, { inList });
-          });
-          // 块级元素后加一个换行
-          return blockText + '\n';
-        }
-
-        // 7) 其他行级元素（span、strong、em、b、i 等），不主动加换行
-        let inlineText = '';
-        node.childNodes.forEach(child => {
-          inlineText += domToText(child, { inList });
-        });
-        return inlineText;
-      }
-
-      // 如果不是文本节点，也不是元素节点（如注释），可忽略
-      return '';
-    }
-
-    // 点击 "转为纯文本" 按钮
-    convertBtn.addEventListener('click', function() {
-      // 1. 获取输入区域的 Markdown 文本
-      const markdownText = markdownInput.value;
-
-      // 2. 利用 markdown-it 渲染成 HTML
-      const renderedHtml = md.render(markdownText);
-
-      // 3. 创建一个临时 <div> 存放渲染后的 HTML
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = renderedHtml;
-
-      // 4. 递归解析 DOM，得到纯文本（带合理换行）
-      let finalText = '';
-      tempDiv.childNodes.forEach(child => {
-        finalText += domToText(child, { inList: false });
-      });
-
-      // 5. 去除多余首尾空白，并显示到页面
-      plainOutput.textContent = finalText.trim() + '\n';
-    });
-
-    // 点击 "复制" 按钮，将结果复制到剪贴板
-    copyBtn.addEventListener('click', async () => {
-      const text = plainOutput.textContent;
-      if (!text) {
-        alert("没有可复制的文本！");
-        return;
-      }
-      try {
-        await navigator.clipboard.writeText(text);
-        alert("复制成功！");
-      } catch (err) {
-        alert("复制失败，请手动复制。");
-      }
-    });
-  </script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
